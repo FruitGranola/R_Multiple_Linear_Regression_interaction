@@ -333,7 +333,7 @@ party_sizeが1の場合、選挙費用が200万ほどあれば当選が見えて
 
 ## 2-1. 交差項を含む重回帰分析
 
-連続変数と連続変数での交差項を行う。  
+連続変数と連続変数での交差項を行う。(厳密には離散変数)  
 ただ、より詳細な分析をするために中心化はしない。
 
 ```{r}
@@ -525,3 +525,67 @@ exppvを観測値の最小から最大まで動かした場合に得られる得
 exppvが有権者一人当たりの選挙費用なので、exppv * 有権者数が本当にかかるコストである。  
 有権者数が10万人の場合にexppvを10にするには、選挙費用が100万円必要である。  
 previousが増えると、exppvがvoteshareに与える影響は小さくなり、傾きが負になる。 
+
+
+
+
+
+
+
+
+
+
+
+<!-- 未投稿部分 -->
+
+# より複雑な重回帰分析
+
+```{r}
+model_3 <- lm(voteshare ~ exppv + nocand + previous + party_size + exppv:party_size + exppv:previous, data = data)
+```
+
+```{r}
+margins_3 <- margins(model_3, at = list(party_size = 0:1,
+                                        previous = 0:16)) %>% 
+  summary() %>% 
+  as.data.frame() %>% 
+  filter(factor %in%  c("exppv"))
+```
+
+```{r, fig.height=8, fig.width=8}
+margins_3 %>% 
+  ggplot(aes(x = previous, y = AME)) +
+  geom_line() +
+  geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.8) +
+  geom_hline(yintercept = 0, color = "red", linetype = 2)  +
+  geom_label(aes(label = round(AME, 2), color = as.factor(party_size)),
+             size = 2,
+             show.legend = F) +
+  ylim(y = -0.65, yend = 0.7) +
+  facet_wrap(~party_size, labeller = as_labeller(c(`0` = "その他", `1` = "自民党・民主党")))
+```
+
+```{r, fig.height=8, fig.width=8}
+summary(model_3)
+
+pred <- with(data, expand.grid(exppv = seq(min(exppv, na.rm=TRUE), 
+                                           max(exppv, na.rm=TRUE), 
+                                           length = 100),
+                               previous = 0:16,
+                               party_size = c(0,1),
+                               nocand = mean(data$nocand)))
+
+## mutate を使って、新たな変数である予測値 (pred) を作り計算する
+pred %<>% mutate(voteshare = predict(model_3, newdata = pred))
+
+## 散布図は観測値で描き、回帰直線は予測値 (pred) で描く
+ggplot(data, aes(x = exppv, y = voteshare, color = as.factor(party_size))) +
+  geom_smooth(data = pred, show.legend = F) + 
+  labs(x = "一人あたり選挙費用(円)", y = NULL,
+       title = "交差項") + 
+  scale_color_discrete(name = NULL, labels = c("その他", "自民・民主")) + 
+  guides(color = guide_legend(reverse = TRUE)) +
+  facet_wrap(~ previous)
+```
+
+
